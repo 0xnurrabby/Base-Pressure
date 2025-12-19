@@ -8,7 +8,7 @@ import { sdk } from "https://esm.sh/@farcaster/miniapp-sdk@0.2.1";
 import { Attribution } from "https://esm.sh/ox/erc8021";
 const BUILDER_CODE = "bc_6f1dev0n";
 const dataSuffix = Attribution.toDataSuffix({
-  codes: [BUILDER_CODE]
+  codes: [BUILDER_CODE],
 });
 
 // Ethers (ABI encoding)
@@ -19,9 +19,7 @@ import { ethers } from "https://esm.sh/ethers@6.13.4";
 // ---------------------------
 const BASE_CHAIN_ID_HEX = "0x2105";
 const CONTRACT = "0xB331328F506f2D35125e367A190e914B1b6830cF";
-const ABI = [
-  "function logAction(bytes32 action, bytes data) external"
-];
+const ABI = ["function logAction(bytes32 action, bytes data) external"];
 
 // ---------------------------
 // DOM
@@ -56,57 +54,75 @@ for (const tab of document.querySelectorAll(".tab")) {
 }
 
 // ---------------------------
-// Mini App detection gate
+// Mini App detection gate (FIXED: retry + warmup)
 // ---------------------------
-// Some Farcaster clients may not report `isInMiniApp()` correctly on first load.
-// We treat the environment as a Mini App if ANY of these succeed:
-// - sdk.isInMiniApp() returns true
-// - sdk.context can be read
-// - sdk.wallet.getEthereumProvider() is available
 let isMini = false;
 let fcUser = null;
 
-try {
-  isMini = await sdk.isInMiniApp();
-} catch {
-  isMini = false;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function detectMiniAppWithRetry() {
+  // Some hosts inject sdk context/provider slightly after initial JS executes.
+  // We'll retry a few times and consider Mini App TRUE if:
+  // - sdk.isInMiniApp() true
+  // - sdk.context readable (even if user null)
+  // - sdk.wallet.getEthereumProvider() returns provider
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    // 1) isInMiniApp
+    try {
+      const v = await sdk.isInMiniApp();
+      if (v) return { ok: true, ctx: null, providerOk: false };
+    } catch {}
+
+    // 2) context readable (race with timeout so we don't hang)
+    try {
+      const ctx = await Promise.race([
+        sdk.context,
+        new Promise((_, rej) => setTimeout(() => rej(new Error("ctx-timeout")), 250)),
+      ]);
+      if (ctx) return { ok: true, ctx, providerOk: false };
+    } catch {}
+
+    // 3) provider exists
+    try {
+      const p = await Promise.race([
+        sdk.wallet.getEthereumProvider(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("prov-timeout")), 250)),
+      ]);
+      if (p) return { ok: true, ctx: null, providerOk: true };
+    } catch {}
+
+    await sleep(150 + attempt * 30); // backoff
+  }
+
+  return { ok: false, ctx: null, providerOk: false };
 }
 
-try {
-  const ctx = await sdk.context;
-  fcUser = ctx?.user ?? null;
-  // If context is readable, we are inside a Mini App host.
-  if (fcUser || ctx) isMini = true;
-} catch {
-  // ignore
-}
+// Run detection BEFORE gameplay init
+const det = await detectMiniAppWithRetry();
 
-try {
-  // If the host provides the Mini App ethereum provider, we are in Mini App.
-  const p = await sdk.wallet.getEthereumProvider();
-  if (p) isMini = true;
-} catch {
-  // ignore
-}
-
-if (!isMini) {
+if (!det.ok) {
   // Hard gate: do not run the game in browser mode.
-  miniOnly.hidden = false;
-  try { await sdk.actions.ready(); } catch {}
+  if (miniOnly) miniOnly.hidden = false;
+
+  // Still call ready to avoid host spinner (harmless if not in mini app)
+  try {
+    await sdk.actions.ready();
+  } catch {}
+
   throw new Error("Not running in Mini App context.");
 }
 
-// Load context ASAP (used for display name + pfp)
-// (fcUser may already be populated above) (used for display name + pfp)
-// fcUser already loaded above when possible
+// Load context for profile (if available)
 try {
-  const ctx = await sdk.context;
+  const ctx = det.ctx ?? (await sdk.context);
   fcUser = ctx?.user ?? null;
 } catch {
   fcUser = null;
 }
 
-// Now we can show the app.
+// Now we can show the app (IMPORTANT)
 await sdk.actions.ready();
 
 // ---------------------------
@@ -189,11 +205,13 @@ function saveEntries(entries) {
   } catch {}
 }
 
-function nowMs() { return Date.now(); }
+function nowMs() {
+  return Date.now();
+}
 
 function startOfDayMs(ts) {
   const d = new Date(ts);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -202,7 +220,7 @@ function startOfWeekMs(ts) {
   const d = new Date(ts);
   const day = (d.getDay() + 6) % 7; // Monday=0
   d.setDate(d.getDate() - day);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -210,11 +228,11 @@ function filterBoard(entries, mode) {
   const ts = nowMs();
   if (mode === "daily") {
     const start = startOfDayMs(ts);
-    return entries.filter(e => e.ts >= start);
+    return entries.filter((e) => e.ts >= start);
   }
   if (mode === "weekly") {
     const start = startOfWeekMs(ts);
-    return entries.filter(e => e.ts >= start);
+    return entries.filter((e) => e.ts >= start);
   }
   return entries;
 }
@@ -222,13 +240,13 @@ function filterBoard(entries, mode) {
 function displayName() {
   if (fcUser?.displayName) return fcUser.displayName;
   if (fcUser?.username) return `@${fcUser.username}`;
-  if (walletAddress) return `${walletAddress.slice(0,6)}…${walletAddress.slice(-4)}`;
+  if (walletAddress) return `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`;
   return "anon";
 }
 
 function renderBoard() {
   const entries = filterBoard(loadEntries(), activeBoard)
-    .sort((a,b) => (b.score - a.score) || (b.ts - a.ts))
+    .sort((a, b) => b.score - a.score || b.ts - a.ts)
     .slice(0, 10);
 
   if (!entries.length) {
@@ -236,13 +254,14 @@ function renderBoard() {
     return;
   }
 
-  boardEl.innerHTML = entries.map((e, i) => {
-    const name = e.username ? `@${e.username}` : (e.name || "anon");
-    const meta = e.wallet ? `${e.wallet.slice(0,6)}…${e.wallet.slice(-4)}` : "—";
-    return `
+  boardEl.innerHTML = entries
+    .map((e, i) => {
+      const name = e.username ? `@${e.username}` : e.name || "anon";
+      const meta = e.wallet ? `${e.wallet.slice(0, 6)}…${e.wallet.slice(-4)}` : "—";
+      return `
       <div class="row">
         <div class="rowLeft">
-          <div class="rank">${i+1}</div>
+          <div class="rank">${i + 1}</div>
           <div class="rowUser">
             <div class="rowName">${escapeHtml(name)}</div>
             <div class="rowMeta">${escapeHtml(meta)}</div>
@@ -251,11 +270,12 @@ function renderBoard() {
         <div class="rowScore">${formatInt(e.score)}</div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"})[c]);
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
 }
 
 // ---------------------------
@@ -275,17 +295,14 @@ function formatInt(n) {
 }
 
 function calcRisk(pumpsCount) {
-  // High-tension curve, but keep it fair early.
-  const base = 0.03;                  // 3%
-  const ramp = 0.018 * pumpsCount;    // +1.8% per pump
-  const jitter = 0.0;                 // shown risk doesn't include hidden jitter
-  return Math.min(0.92, base + ramp + jitter);
+  const base = 0.03; // 3%
+  const ramp = 0.018 * pumpsCount; // +1.8% per pump
+  return Math.min(0.92, base + ramp);
 }
 
 function calcHiddenRisk(pumpsCount) {
-  // Add some randomness so it's not perfectly predictable.
   const shown = calcRisk(pumpsCount);
-  const jitter = (Math.random() * 0.06); // up to +6%
+  const jitter = Math.random() * 0.06; // up to +6%
   return Math.min(0.97, shown + jitter);
 }
 
@@ -333,25 +350,20 @@ function toast(msg, ms = 2200) {
 }
 
 function flashRed() {
-  document.body.animate(
-    [
-      { backgroundColor: "rgba(255,59,59,0.20)" },
-      { backgroundColor: "rgba(0,0,0,0)" },
-    ],
-    { duration: 300, easing: "ease-out" }
-  );
+  document.body.animate([{ backgroundColor: "rgba(255,59,59,0.20)" }, { backgroundColor: "rgba(0,0,0,0)" }], {
+    duration: 300,
+    easing: "ease-out",
+  });
 }
 
-function flashOff() {
-  // no-op; ensures we don't keep stateful flash overlays
-}
+function flashOff() {}
 
 // ---------------------------
 // Wallet connect (Mini App provider)
 // ---------------------------
 async function getProvider() {
   if (walletProvider) return walletProvider;
-  walletProvider = await sdk.wallet.getEthereumProvider(); // EIP-1193 citeturn1search0
+  walletProvider = await sdk.wallet.getEthereumProvider();
   return walletProvider;
 }
 
@@ -394,7 +406,7 @@ function renderProfile() {
   }
 
   const pfp = fcUser?.pfpUrl ? `<img class="pfp" src="${fcUser.pfpUrl}" alt="" />` : "";
-  const handle = fcUser?.username ? `@${fcUser.username}` : `${walletAddress.slice(0,6)}…${walletAddress.slice(-4)}`;
+  const handle = fcUser?.username ? `@${fcUser.username}` : `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`;
   profileEl.innerHTML = `
     ${pfp}
     <div class="handle">${escapeHtml(handle)}</div>
@@ -409,18 +421,15 @@ connectBtn?.addEventListener("click", connectWallet);
 pumpBtn.addEventListener("click", () => {
   if (!walletAddress) return;
 
-  // Score
   pumps += 1;
   multiplier = Math.min(9.9, 1 + pumps * 0.12);
   const gained = Math.floor(10 * multiplier);
   run += gained;
 
-  // Feedback (haptics + rising tone)
   const vib = Math.min(75, 18 + pumps * 6);
   vibrate(vib);
   blip(220 + pumps * 26, 0.07);
 
-  // Pop check
   const risk = calcHiddenRisk(pumps);
   if (Math.random() < risk) {
     popped = true;
@@ -433,7 +442,7 @@ pumpBtn.addEventListener("click", () => {
     vibrate(160);
     toast("💥 POP! You lost the run. Bank earlier.");
     updateUI();
-    // Allow immediate new run
+
     popped = false;
     updateUI();
     return;
@@ -501,46 +510,38 @@ async function mintHighScore() {
 
     const action = ethers.encodeBytes32String("MINT_HIGH_SCORE");
     const payload = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint256","uint256","string","address"],
-      [BigInt(scoreToMint), BigInt(nowMs()), (fcUser?.username ?? ""), walletAddress]
+      ["uint256", "uint256", "string", "address"],
+      [BigInt(scoreToMint), BigInt(nowMs()), fcUser?.username ?? "", walletAddress]
     );
 
-    // Contract call: logAction(bytes32,bytes)
     const data = iface.encodeFunctionData("logAction", [action, payload]);
 
-    // ERC-5792 sendCalls with required fields (Base Build rule)
     const params = {
       version: "2.0.0",
       from: walletAddress,
       chainId: BASE_CHAIN_ID_HEX,
       atomicRequired: true,
-      calls: [{
-        to: CONTRACT,
-        value: "0x0",
-        data
-      }],
+      calls: [
+        {
+          to: CONTRACT,
+          value: "0x0",
+          data,
+        },
+      ],
       capabilities: {
-        dataSuffix
-      }
+        dataSuffix,
+      },
     };
 
-    // Prefer wallet_sendCalls, fallback to eth_sendTransaction if unavailable.
     try {
-      await provider.request({ method: "wallet_sendCalls", params: [params] }); // EIP-5792 citeturn0search3
+      await provider.request({ method: "wallet_sendCalls", params: [params] });
       toast("Mint submitted. Check your wallet for status.");
     } catch (e) {
-      // Fallback: direct tx without sendCalls (still works in some wallets)
-      const tx = {
-        from: walletAddress,
-        to: CONTRACT,
-        data,
-        value: "0x0"
-      };
+      const tx = { from: walletAddress, to: CONTRACT, data, value: "0x0" };
       await provider.request({ method: "eth_sendTransaction", params: [tx] });
       toast("Mint tx sent (fallback).");
     }
 
-    // Add a local note that this score was minted
     const entries = loadEntries();
     entries.push({
       ts: nowMs(),
