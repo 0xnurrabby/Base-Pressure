@@ -11,13 +11,13 @@ import {
   formatEther,
 } from "https://esm.sh/viem@2.21.50";
 
-const DOMAIN = "https://nurrabby.com";
+const DOMAIN = "https://base-pressure.vercel.app/";
 const CONTRACT = "0xB331328F506f2D35125e367A190e914B1b6830cF";
 const BASE_CHAIN_ID = "0x2105";
 const BASE_RPC = "https://mainnet.base.org";
 
 // REQUIRED by your spec:
-const BUILDER_CODE = "TODO_REPLACE_BUILDER_CODE";
+const BUILDER_CODE = "bc_6f1dev0n";
 const dataSuffix = Attribution.toDataSuffix({ codes: [BUILDER_CODE] });
 
 const ABI = parseAbi([
