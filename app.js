@@ -6,7 +6,7 @@ import { sdk } from "https://esm.sh/@farcaster/miniapp-sdk@0.2.1";
 
 // Builder Codes (ERC-8021)
 import { Attribution } from "https://esm.sh/ox/erc8021";
-const BUILDER_CODE = "TODO_REPLACE_BUILDER_CODE";
+const BUILDER_CODE = "bc_6f1dev0n";
 const dataSuffix = Attribution.toDataSuffix({
   codes: [BUILDER_CODE]
 });
