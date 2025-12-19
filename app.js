@@ -88,6 +88,30 @@ try {
 } catch {
   // ignore
 }
+// Retry a few times — some clients populate context/provider after a short delay
+if (!isMini) {
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 180));
+
+    try {
+      const ctx = await sdk.context;
+      fcUser = ctx?.user ?? null;
+      if (ctx) { isMini = true; break; }
+    } catch {}
+
+    try {
+      const p = await sdk.wallet.getEthereumProvider();
+      if (p) { isMini = true; break; }
+    } catch {}
+  }
+}
+
+// Last-resort fallback: known Mini App hosts user agents
+if (!isMini) {
+  const ua = navigator.userAgent || "";
+  if (/Warpcast|Farcaster|Base|Coinbase/i.test(ua)) isMini = true;
+}
+
 
 if (!isMini) {
   // Hard gate: do not run the game in browser mode.
