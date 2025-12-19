@@ -40,7 +40,7 @@ const mintRow = el("mintRow");
 const mintBtn = el("mintBtn");
 const boardEl = el("board");
 const resetBtn = el("resetBtn");
-const miniOnly = el("miniOnly");
+
 
 // Tabs
 let activeBoard = "daily";
@@ -67,10 +67,6 @@ let fcUser = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function setMiniOnlyOverlay(show) {
-  if (!miniOnly) return;
-  miniOnly.hidden = !show;
-}
 
 function setGameEnabled(enabled) {
   if (connectBtn) connectBtn.disabled = !enabled;
@@ -121,21 +117,12 @@ try {
   await sdk.actions.ready();
 } catch {}
 
-// Start locked until proven mini
-setMiniOnlyOverlay(true);
-setGameEnabled(false);
 
 // Poll for up to 12 seconds to avoid false negatives
 (async () => {
   const start = Date.now();
   const maxMs = 12000;
 
-  while (Date.now() - start < maxMs) {
-    const ok = await tryDetectOnce();
-    if (ok) {
-      isMini = true;
-      setMiniOnlyOverlay(false);
-      await loadContextSafely();
 
       renderProfile(); // update with fcUser if available
       updateUI();      // enable buttons correctly
@@ -145,12 +132,7 @@ setGameEnabled(false);
     await sleep(250);
   }
 
-  // Still not detected: keep locked (no browser gameplay)
-  isMini = false;
-  setMiniOnlyOverlay(true);
-  setGameEnabled(false);
-})();
-
+ 
 // ---------------------------
 // Haptics & Sound (Web Audio)
 // ---------------------------
