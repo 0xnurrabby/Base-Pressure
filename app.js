@@ -1,5 +1,5 @@
 // Base Pressure — Farcaster Mini App (Base)
-// Domain: https://nurrabby.com/
+// Domain: https://base-pressure.vercel.app/
 //
 // Mini App SDK
 import { sdk } from "https://esm.sh/@farcaster/miniapp-sdk@0.2.1";
