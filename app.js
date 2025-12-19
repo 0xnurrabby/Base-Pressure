@@ -111,11 +111,20 @@ if (!isMini) {
   const ua = navigator.userAgent || "";
   if (/Warpcast|Farcaster|Base|Coinbase/i.test(ua)) isMini = true;
 }
+// Guaranteed heuristic: Mini Apps are typically embedded (not top-level).
+// If we're not the top window, treat as Mini App.
+if (!isMini) {
+  try {
+    if (window.self !== window.top) isMini = true;
+  } catch {
+    // Accessing window.top can throw in embedded contexts; that's also a signal.
+    isMini = true;
+  }
+}
 
 
 if (!isMini) {
   // Hard gate: do not run the game in browser mode.
-  miniOnly.hidden = false;
   try { await sdk.actions.ready(); } catch {}
   throw new Error("Not running in Mini App context.");
 }
