@@ -1,0 +1,32 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Base Pressure",
+    "homeUrl": "https://nurrabby.com/",
+    "iconUrl": "https://nurrabby.com/assets/icon.png",
+    "splashImageUrl": "https://nurrabby.com/assets/splash-200.png",
+    "splashBackgroundColor": "#070A12",
+    "subtitle": "Risk arcade game",
+    "description": "Pump the bubble to grow your multiplier. Bank before it pops or lose the run.",
+    "screenshotUrls": [
+      "https://nurrabby.com/assets/embed-3x2.png"
+    ],
+    "primaryCategory": "games",
+    "tags": [
+      "games",
+      "arcade",
+      "risk"
+    ],
+    "heroImageUrl": "https://nurrabby.com/assets/embed-3x2.png",
+    "tagline": "How big can you grow it?",
+    "ogTitle": "Base Pressure",
+    "ogDescription": "Pump. Risk. Bank. Mint your high score.",
+    "ogImageUrl": "https://nurrabby.com/assets/embed-3x2.png",
+    "noindex": false
+  }
+}
