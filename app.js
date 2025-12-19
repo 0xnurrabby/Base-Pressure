@@ -54,76 +54,102 @@ for (const tab of document.querySelectorAll(".tab")) {
 }
 
 // ---------------------------
-// Mini App detection gate (FIXED: retry + warmup)
+// Mini App detection gate (PRODUCTION FIX)
+// - No throw
+// - UI loads
+// - Overlay shown initially
+// - Polls for Mini App context up to 12s
+// - If detected => overlay hides + buttons enabled
+// - If not detected => overlay stays + buttons remain disabled (NO browser gameplay)
 // ---------------------------
 let isMini = false;
 let fcUser = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function detectMiniAppWithRetry() {
-  // Some hosts inject sdk context/provider slightly after initial JS executes.
-  // We'll retry a few times and consider Mini App TRUE if:
-  // - sdk.isInMiniApp() true
-  // - sdk.context readable (even if user null)
-  // - sdk.wallet.getEthereumProvider() returns provider
-
-  for (let attempt = 0; attempt < 10; attempt++) {
-    // 1) isInMiniApp
-    try {
-      const v = await sdk.isInMiniApp();
-      if (v) return { ok: true, ctx: null, providerOk: false };
-    } catch {}
-
-    // 2) context readable (race with timeout so we don't hang)
-    try {
-      const ctx = await Promise.race([
-        sdk.context,
-        new Promise((_, rej) => setTimeout(() => rej(new Error("ctx-timeout")), 250)),
-      ]);
-      if (ctx) return { ok: true, ctx, providerOk: false };
-    } catch {}
-
-    // 3) provider exists
-    try {
-      const p = await Promise.race([
-        sdk.wallet.getEthereumProvider(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("prov-timeout")), 250)),
-      ]);
-      if (p) return { ok: true, ctx: null, providerOk: true };
-    } catch {}
-
-    await sleep(150 + attempt * 30); // backoff
-  }
-
-  return { ok: false, ctx: null, providerOk: false };
+function setMiniOnlyOverlay(show) {
+  if (!miniOnly) return;
+  miniOnly.hidden = !show;
 }
 
-// Run detection BEFORE gameplay init
-const det = await detectMiniAppWithRetry();
+function setGameEnabled(enabled) {
+  if (connectBtn) connectBtn.disabled = !enabled;
+  if (pumpBtn) pumpBtn.disabled = !enabled || !walletAddress;
+  if (bankBtn) bankBtn.disabled = !enabled || !walletAddress || run <= 0;
+  if (mintBtn) mintBtn.disabled = !enabled || !walletAddress || total <= 0;
+}
 
-if (!det.ok) {
-  // Hard gate: do not run the game in browser mode.
-  if (miniOnly) miniOnly.hidden = false;
-
-  // Still call ready to avoid host spinner (harmless if not in mini app)
+async function tryDetectOnce() {
+  // 1) isInMiniApp
   try {
-    await sdk.actions.ready();
+    const v = await sdk.isInMiniApp();
+    if (v) return true;
   } catch {}
 
-  throw new Error("Not running in Mini App context.");
+  // 2) context readable
+  try {
+    const ctx = await Promise.race([
+      sdk.context,
+      new Promise((_, rej) => setTimeout(() => rej(new Error("ctx-timeout")), 250)),
+    ]);
+    if (ctx) return true;
+  } catch {}
+
+  // 3) provider exists
+  try {
+    const p = await Promise.race([
+      sdk.wallet.getEthereumProvider(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("prov-timeout")), 250)),
+    ]);
+    if (p) return true;
+  } catch {}
+
+  return false;
 }
 
-// Load context for profile (if available)
+async function loadContextSafely() {
+  try {
+    const ctx = await sdk.context;
+    fcUser = ctx?.user ?? null;
+  } catch {
+    fcUser = null;
+  }
+}
+
+// Always call ready (safe) — do NOT block UI on it
 try {
-  const ctx = det.ctx ?? (await sdk.context);
-  fcUser = ctx?.user ?? null;
-} catch {
-  fcUser = null;
-}
+  await sdk.actions.ready();
+} catch {}
 
-// Now we can show the app (IMPORTANT)
-await sdk.actions.ready();
+// Start locked until proven mini
+setMiniOnlyOverlay(true);
+setGameEnabled(false);
+
+// Poll for up to 12 seconds to avoid false negatives
+(async () => {
+  const start = Date.now();
+  const maxMs = 12000;
+
+  while (Date.now() - start < maxMs) {
+    const ok = await tryDetectOnce();
+    if (ok) {
+      isMini = true;
+      setMiniOnlyOverlay(false);
+      await loadContextSafely();
+
+      renderProfile(); // update with fcUser if available
+      updateUI();      // enable buttons correctly
+      setGameEnabled(true);
+      return;
+    }
+    await sleep(250);
+  }
+
+  // Still not detected: keep locked (no browser gameplay)
+  isMini = false;
+  setMiniOnlyOverlay(true);
+  setGameEnabled(false);
+})();
 
 // ---------------------------
 // Haptics & Sound (Web Audio)
@@ -216,7 +242,6 @@ function startOfDayMs(ts) {
 }
 
 function startOfWeekMs(ts) {
-  // ISO-ish week starting Monday
   const d = new Date(ts);
   const day = (d.getDay() + 6) % 7; // Monday=0
   d.setDate(d.getDate() - day);
@@ -237,11 +262,12 @@ function filterBoard(entries, mode) {
   return entries;
 }
 
-function displayName() {
-  if (fcUser?.displayName) return fcUser.displayName;
-  if (fcUser?.username) return `@${fcUser.username}`;
-  if (walletAddress) return `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`;
-  return "anon";
+function formatInt(n) {
+  return Math.max(0, Math.floor(n)).toLocaleString();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
 }
 
 function renderBoard() {
@@ -274,10 +300,6 @@ function renderBoard() {
     .join("");
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
-}
-
 // ---------------------------
 // Game state
 // ---------------------------
@@ -290,54 +312,16 @@ let pumps = 0;
 let multiplier = 1.0;
 let popped = false;
 
-function formatInt(n) {
-  return Math.max(0, Math.floor(n)).toLocaleString();
-}
-
 function calcRisk(pumpsCount) {
-  const base = 0.03; // 3%
-  const ramp = 0.018 * pumpsCount; // +1.8% per pump
+  const base = 0.03;
+  const ramp = 0.018 * pumpsCount;
   return Math.min(0.92, base + ramp);
 }
 
 function calcHiddenRisk(pumpsCount) {
   const shown = calcRisk(pumpsCount);
-  const jitter = Math.random() * 0.06; // up to +6%
+  const jitter = Math.random() * 0.06;
   return Math.min(0.97, shown + jitter);
-}
-
-function updateUI() {
-  runPointsEl.textContent = formatInt(run);
-  totalPointsEl.textContent = formatInt(total);
-  multEl.textContent = `${multiplier.toFixed(1)}x`;
-  riskEl.textContent = `${Math.round(calcRisk(pumps) * 100)}%`;
-
-  // Bubble scale (keep always on screen)
-  const maxScale = 1.35;
-  const scale = Math.min(maxScale, 1 + pumps * 0.03);
-  bubble.style.transform = `scale(${scale})`;
-  bubbleGlow.style.transform = `scale(${Math.min(1.45, scale + 0.08)})`;
-  bubble.style.filter = `saturate(${1 + pumps * 0.01})`;
-
-  // Controls
-  const canPlay = !!walletAddress && !popped;
-  pumpBtn.disabled = !canPlay;
-  bankBtn.disabled = !canPlay || run <= 0;
-
-  // Mint button appears if total is a new personal best (local)
-  const entries = loadEntries();
-  const best = entries.reduce((m, e) => Math.max(m, e.score || 0), 0);
-  mintRow.hidden = !(total > 0 && total >= best);
-}
-
-function resetRun(reason = "") {
-  run = 0;
-  pumps = 0;
-  multiplier = 1.0;
-  popped = false;
-  flashOff();
-  updateUI();
-  if (reason) toast(reason);
 }
 
 function toast(msg, ms = 2200) {
@@ -356,14 +340,56 @@ function flashRed() {
   });
 }
 
-function flashOff() {}
+function updateUI() {
+  runPointsEl.textContent = formatInt(run);
+  totalPointsEl.textContent = formatInt(total);
+  multEl.textContent = `${multiplier.toFixed(1)}x`;
+  riskEl.textContent = `${Math.round(calcRisk(pumps) * 100)}%`;
+
+  // Bubble scale (keep always on screen)
+  const maxScale = 1.35;
+  const scale = Math.min(maxScale, 1 + pumps * 0.03);
+  bubble.style.transform = `scale(${scale})`;
+  bubbleGlow.style.transform = `scale(${Math.min(1.45, scale + 0.08)})`;
+  bubble.style.filter = `saturate(${1 + pumps * 0.01})`;
+
+  // Controls: only usable when mini detected and wallet connected and not popped
+  const canPlay = isMini && !!walletAddress && !popped;
+  pumpBtn.disabled = !canPlay;
+  bankBtn.disabled = !canPlay || run <= 0;
+
+  // Mint appears if total is new personal best
+  const entries = loadEntries();
+  const best = entries.reduce((m, e) => Math.max(m, e.score || 0), 0);
+  mintRow.hidden = !(total > 0 && total >= best);
+
+  // Also keep connect disabled in non-mini
+  if (connectBtn) connectBtn.disabled = !isMini;
+}
+
+function renderProfile() {
+  if (!walletAddress) {
+    profileEl.innerHTML = `<button class="btn btn-ghost" id="connectBtnInner">Connect Wallet</button>`;
+    el("connectBtnInner").addEventListener("click", connectWallet);
+    // Disable if not mini
+    el("connectBtnInner").disabled = !isMini;
+    return;
+  }
+
+  const pfp = fcUser?.pfpUrl ? `<img class="pfp" src="${fcUser.pfpUrl}" alt="" />` : "";
+  const handle = fcUser?.username ? `@${fcUser.username}` : `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`;
+  profileEl.innerHTML = `
+    ${pfp}
+    <div class="handle">${escapeHtml(handle)}</div>
+  `;
+}
 
 // ---------------------------
 // Wallet connect (Mini App provider)
 // ---------------------------
 async function getProvider() {
   if (walletProvider) return walletProvider;
-  walletProvider = await sdk.wallet.getEthereumProvider();
+  walletProvider = await sdk.wallet.getEthereumProvider(); // EIP-1193
   return walletProvider;
 }
 
@@ -383,6 +409,11 @@ async function ensureBaseChain(provider) {
 }
 
 async function connectWallet() {
+  if (!isMini) {
+    toast("Open via Farcaster Mini App launcher.");
+    return;
+  }
+
   try {
     const provider = await getProvider();
     const accounts = await provider.request({ method: "eth_requestAccounts" });
@@ -391,26 +422,12 @@ async function connectWallet() {
     await ensureBaseChain(provider);
 
     renderProfile();
-    resetRun("Connected. Pump carefully.");
+    toast("Connected. Pump carefully.");
+    updateUI();
   } catch (e) {
     toast("Wallet connection cancelled or failed.");
     console.warn(e);
   }
-}
-
-function renderProfile() {
-  if (!walletAddress) {
-    profileEl.innerHTML = `<button class="btn btn-ghost" id="connectBtn">Connect Wallet</button>`;
-    el("connectBtn").addEventListener("click", connectWallet);
-    return;
-  }
-
-  const pfp = fcUser?.pfpUrl ? `<img class="pfp" src="${fcUser.pfpUrl}" alt="" />` : "";
-  const handle = fcUser?.username ? `@${fcUser.username}` : `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`;
-  profileEl.innerHTML = `
-    ${pfp}
-    <div class="handle">${escapeHtml(handle)}</div>
-  `;
 }
 
 connectBtn?.addEventListener("click", connectWallet);
@@ -419,6 +436,7 @@ connectBtn?.addEventListener("click", connectWallet);
 // Game actions
 // ---------------------------
 pumpBtn.addEventListener("click", () => {
+  if (!isMini) return;
   if (!walletAddress) return;
 
   pumps += 1;
@@ -452,6 +470,7 @@ pumpBtn.addEventListener("click", () => {
 });
 
 bankBtn.addEventListener("click", () => {
+  if (!isMini) return;
   if (!walletAddress || run <= 0) return;
 
   total += run;
@@ -482,8 +501,13 @@ resetBtn.addEventListener("click", () => {
   if (!confirm("Reset local (offchain) leaderboard data on this device?")) return;
   saveEntries([]);
   total = 0;
-  resetRun("Local scores reset.");
+  run = 0;
+  pumps = 0;
+  multiplier = 1.0;
+  popped = false;
+  toast("Local scores reset.");
   renderBoard();
+  updateUI();
 });
 
 // ---------------------------
@@ -492,6 +516,10 @@ resetBtn.addEventListener("click", () => {
 const iface = new ethers.Interface(ABI);
 
 async function mintHighScore() {
+  if (!isMini) {
+    toast("Open via Farcaster Mini App launcher.");
+    return;
+  }
   if (!walletAddress) {
     toast("Connect wallet first.");
     return;
@@ -537,11 +565,13 @@ async function mintHighScore() {
       await provider.request({ method: "wallet_sendCalls", params: [params] });
       toast("Mint submitted. Check your wallet for status.");
     } catch (e) {
+      // fallback
       const tx = { from: walletAddress, to: CONTRACT, data, value: "0x0" };
       await provider.request({ method: "eth_sendTransaction", params: [tx] });
       toast("Mint tx sent (fallback).");
     }
 
+    // local note
     const entries = loadEntries();
     entries.push({
       ts: nowMs(),
