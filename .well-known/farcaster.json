@@ -1,0 +1,35 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjE0MTU3NzUsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhDYTZjMERBNDRFMjBCMkYwMUY5YTYwYjE0RjkzNTE3NUQ1NkU5MWNBIn0",
+    "payload": "eyJkb21haW4iOiJiYXNlLXByZXNzdXJlLnZlcmNlbC5hcHAifQ",
+    "signature": "BQIRYUlCerNtKAtjhJg0+gR0nr5xg1o9R3nEDUByZ7s1iUfsi/8RzbpfzcryZQrAynUlAA6QqOuJI+L87sqzKxs="
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Base Pressure",
+    "homeUrl": "https://base-pressure.vercel.app/",
+    "iconUrl": "https://base-pressure.vercel.app/assets/icon.png",
+    "splashImageUrl": "https://base-pressure.vercel.app/assets/splash-200.png",
+    "splashBackgroundColor": "#EAF7FF",
+    "subtitle": "Risk arcade game",
+    "description": "Pump the bubble to grow your multiplier. Bank before it pops or lose the run.",
+    "screenshotUrls": [
+      "https://base-pressure.vercel.app/assets/embed-3x2.png"
+    ],
+    "primaryCategory": "games",
+    "tags": [
+      "games",
+      "arcade",
+      "risk",
+      "base"
+    ],
+    "heroImageUrl": "https://base-pressure.vercel.app/assets/embed-3x2.png",
+    "tagline": "How big can you grow it before it bursts?",
+    "ogTitle": "Base Pressure",
+    "ogDescription": "Pump. Risk. Bank. Mint your high score.",
+    "ogImageUrl": "https://base-pressure.vercel.app/assets/embed-3x2.png",
+    "noindex": false,
+    "imageUrl": "https://base-pressure.vercel.app/assets/embed-3x2.png",
+    "buttonTitle": "Play Base Pressure"
+  }
+}
