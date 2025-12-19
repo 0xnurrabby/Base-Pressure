@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Base Pressure</title>
+<meta name="base:app_id" content="69455d76d77c069a945be14e" />
+  <meta name="fc:miniapp" content='{"version":"1","imageUrl":"https://base-pressure.vercel.app/assets/embed-3x2.png","button":{"title":"Play Base Pressure","action":{"type":"launch_frame","name":"Base Pressure","url":"https://base-pressure.vercel.app/","splashImageUrl":"https://base-pressure.vercel.app/assets/splash-200.png","splashBackgroundColor":"#EAF7FF"}}}' />
+  <meta name="fc:frame" content='{"version":"1","imageUrl":"https://base-pressure.vercel.app/assets/embed-3x2.png","button":{"title":"Play Base Pressure","action":{"type":"launch_frame","name":"Base Pressure","url":"https://base-pressure.vercel.app/","splashImageUrl":"https://base-pressure.vercel.app/assets/splash-200.png","splashBackgroundColor":"#EAF7FF"}}}' />
+
+  <meta name="theme-color" content="#EAF7FF" />
+  <link rel="icon" href="/assets/icon.png" />
+  <link rel="preload" href="/styles.css" as="style" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brandDot"></div>
+        <div>
+          <div class="title">Base Pressure</div>
+          <div class="subtitle">How big can you grow it before it bursts?</div>
+        </div>
+      </div>
+
+      <div class="profile" id="profile">
+        <button class="btn btn-ghost" id="connectBtn">Connect Wallet</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="bubbleWrap" aria-hidden="true">
+        <div class="bubble" id="bubble"></div>
+        <div class="bubbleGlow" id="bubbleGlow"></div>
+      </div>
+
+      <div class="hud">
+        <div class="statCard">
+          <div class="statLabel">Run</div>
+          <div class="statValue" id="runPoints">0</div>
+        </div>
+        <div class="statCard">
+          <div class="statLabel">Total</div>
+          <div class="statValue" id="totalPoints">0</div>
+        </div>
+        <div class="statCard">
+          <div class="statLabel">Multiplier</div>
+          <div class="statValue" id="multiplier">1.0x</div>
+        </div>
+        <div class="statCard danger">
+          <div class="statLabel">Pop Chance</div>
+          <div class="statValue" id="risk">0%</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="pumpBtn" disabled>PUMP</button>
+        <button class="btn btn-secondary" id="bankBtn" disabled>BANK</button>
+      </div>
+
+      <div class="mintRow" id="mintRow" hidden>
+        <button class="btn btn-mint" id="mintBtn">MINT HIGH SCORE</button>
+        <div class="mintHint">Writes your high score onchain via your contract.</div>
+      </div>
+
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelHeader">
+        <div class="panelTitle">Leaderboards</div>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-board="daily" role="tab">Daily</button>
+          <button class="tab" data-board="weekly" role="tab">Weekly</button>
+          <button class="tab" data-board="all" role="tab">All Time</button>
+        </div>
+      </div>
+      <div class="board" id="board"></div>
+      <div class="panelFooter">
+        <button class="btn btn-ghost" id="resetBtn">Reset Local Scores</button>
+        <div class="footNote">Onchain scores are recorded when you mint.</div>
+      </div>
+    </div>
+
+    <div class="miniOnly" id="miniOnly" hidden>
+      <div class="miniOnlyCard">
+        <div class="miniOnlyTitle">Open in a Farcaster Mini App</div>
+        <div class="miniOnlyBody">
+          This game is designed to run inside the Base app / Farcaster clients so it can use Mini App wallet + haptics.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
